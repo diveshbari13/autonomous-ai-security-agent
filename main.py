@@ -17,7 +17,6 @@ ADMIN_IP= "192.168.1.6"
 
 SEEN_ALERTS_FILE = "seen_alerts.txt"
 
-
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 GEMINI_PROMPT = """
@@ -36,36 +35,27 @@ Here is the alert:
 
 processed_alert_ids = set()
 
-def load_seen_alerts():
-    
+def load_seen_alerts():    
     if not os.path.exists(SEEN_ALERTS_FILE):
-        return set() 
-    
+        return set()     
     print(f"Loading memory from {SEEN_ALERTS_FILE}...", file=sys.stderr)
     try:
-        with open(SEEN_ALERTS_FILE, 'r') as f:
-            
+        with open(SEEN_ALERTS_FILE, 'r') as f:          
             return set(line.strip() for line in f)
     except Exception as e:
         print(f"Error loading seen alerts: {e}. Starting fresh.", file=sys.stderr)
         return set()
 
-def save_seen_alert(alert_id):
-    
+def save_seen_alert(alert_id):    
     try:
         with open(SEEN_ALERTS_FILE, 'a') as f:
             f.write(f"{alert_id}\n")
     except Exception as e:
         print(f"Error saving seen alert: {e}", file=sys.stderr)
 
-
-def get_wazuh_alerts():
-    
-    
-    print("Fetching latest alerts...", file=sys.stderr)
-    
-    url = f"{WAZUH_INDEXER_URL}/wazuh-alerts-*/_search"
-    
+def get_wazuh_alerts():     
+    print("Fetching latest alerts...", file=sys.stderr)    
+    url = f"{WAZUH_INDEXER_URL}/wazuh-alerts-*/_search"    
     query = {
         "size": 20,
         "sort": [
@@ -75,7 +65,6 @@ def get_wazuh_alerts():
             "match_all": {}
         }
     }
-
     try:
         response = requests.post(
             url,
@@ -94,17 +83,13 @@ def get_wazuh_alerts():
         print(f"Error in get_wazuh_alerts: {e}!", file=sys.stderr)
         return None
 
-def get_gemini_analysis(alert_entry):
-    
-    print(f"\n Analyzing Alert: {alert_entry.get('rule', {}).get('description', 'No description')}", file=sys.stderr)
-    
+def get_gemini_analysis(alert_entry):    
+    print(f"\n Analyzing Alert: {alert_entry.get('rule', {}).get('description', 'No description')}", file=sys.stderr)    
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-flash-latest')
-        
+        model = genai.GenerativeModel('gemini-flash-latest')        
         alert_text = json.dumps(alert_entry, indent=2)
-        prompt_to_send = GEMINI_PROMPT.format(alert_json=alert_text)
-        
+        prompt_to_send = GEMINI_PROMPT.format(alert_json=alert_text)        
         response = model.generate_content(prompt_to_send)
         analysis = response.text.strip().upper()
         print(f"AI Agent's Decision: {analysis}", file=sys.stderr)
@@ -114,8 +99,7 @@ def get_gemini_analysis(alert_entry):
         print(f"An error occurred during AI analysis: {e}", file=sys.stderr)
         return "ERROR"
 
-def block_ip(ip_address):
-    
+def block_ip(ip_address):    
     if not ip_address:
         print("No IP address found in alert, cannot block.", file=sys.stderr)
         return
@@ -124,10 +108,9 @@ def block_ip(ip_address):
         print(f"Agent saw a failed login from Admin PC ({ip_address}). Ignoring block action.", file=sys.stderr)
         return
 
-    print(f"Running 'Hands': Attempting to block IP: {ip_address}", file=sys.stderr)
+    print(f"Taking Action: Attempting to block IP: {ip_address}", file=sys.stderr)
     try:
-        command = ['iptables', '-I', 'INPUT', '1', '-s', ip_address, '-j', 'DROP']
-        
+        command = ['iptables', '-I', 'INPUT', '1', '-s', ip_address, '-j', 'DROP']        
         subprocess.run(command, check=True)
         print(f"SUCCESS: Successfully blocked {ip_address} using iptables", file=sys.stderr)
         
@@ -140,12 +123,10 @@ def block_ip(ip_address):
 
 
 def main_loop():
-    global processed_alert_ids 
-    
+    global processed_alert_ids     
     if not GEMINI_API_KEY or GEMINI_API_KEY == "YOUR_GEMINI_API_KEY_HERE":
         print(" Set or edit your GEMINI_API_KEY.", file=sys.stderr)
         return
-
     
     processed_alert_ids = load_seen_alerts()
     print(f"Loaded {len(processed_alert_ids)} seen alerts from memory.", file=sys.stderr)
@@ -158,15 +139,13 @@ def main_loop():
             if alerts:
                 for alert in alerts:
                     alert_id = alert.get('id')
-                    
-                    
+                                        
                     if alert_id and (alert_id not in processed_alert_ids):
                         
                         ip_address = alert.get('data', {}).get('srcip')
                         alert_description = alert.get('rule', {}).get('description', '').lower()
                         
                         print(f"[NEW ALERT]: {alert_description}", file=sys.stderr)
-
                         
                         if ip_address and ("authentication fail" in alert_description or \
                                            "failed password" in alert_description or \
@@ -176,8 +155,7 @@ def main_loop():
                             
                             if gemini_decision == "YES":
                                 block_ip(ip_address)
-                        
-                       
+                                               
                         processed_alert_ids.add(alert_id)
                         save_seen_alert(alert_id)
             
@@ -188,7 +166,7 @@ def main_loop():
             break
         except Exception as e:
             print(f"Main loop error: {e}", file=sys.stderr)
-            time.sleep(30) # Wait 30s if an error occurs
+            time.sleep(30) 
 
 if __name__ == "__main__":
     main_loop()
